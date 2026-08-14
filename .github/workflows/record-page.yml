@@ -1,45 +1,43 @@
-
 name: Record Web Page
 
 on:
-  # تشغيل يدوي بالضغط على زر Run workflow من تبويب Actions
   workflow_dispatch:
-
-  # تشغيل تلقائي حسب جدول زمني (اختياري - عدّل الوقت أو احذف السطرين
-  # التاليين إذا تبي تشغيل يدوي فقط)
-  # صيغة cron: دقيقة ساعة يوم شهر يوم-أسبوع (بتوقيت UTC وليس توقيت السعودية)
-  # مثال: تشغيل كل يوم الساعة 6:00 مساءً بتوقيت السعودية = 15:00 UTC
-  schedule:
-    - cron: '0 15 * * *'
-
-env:
-  # <<<<<<<<<<<<<<<< عدّل هذا السطر برابط صفحتك >>>>>>>>>>>>>>>>https://wolf.live/g/
-  TARGET_URL: "https://wolf.live/g/9969"
-  # مدة التسجيل بالثواني (3600 = ساعة كاملة)
-  DURATION_SECONDS: 3600
-  # أبعاد الشاشة الافتراضية (عرض × ارتفاع)
-  SCREEN_WIDTH: 1920
-  SCREEN_HEIGHT: 1080
+    inputs:
+      target_url:
+        description: 'رابط الصفحة المراد تسجيلها'
+        required: true
+        default: 'https://wolf.live/g/9969'
+      duration_minutes:
+        description: 'مدة التسجيل بالدقائق (مثال: 2 = دقيقتين، 60 = ساعة)'
+        required: true
+        default: '60'
+      screen_width:
+        description: 'عرض الشاشة (بكسل)'
+        required: false
+        default: '1920'
+      screen_height:
+        description: 'ارتفاع الشاشة (بكسل)'
+        required: false
+        default: '1080'
 
 jobs:
   record:
     runs-on: ubuntu-latest
-    # الحد الأقصى المسموح للـ job (ساعة التسجيل + وقت إضافي للإعداد والرفع)
-    timeout-minutes: 90
+    timeout-minutes:  ${{ fromJSON(inputs.duration_minutes) + 10 }}  # مهلة إضافية للتحضير والرفع
 
     steps:
-      - name: تثبيت الأدوات المطلوبة (Xvfb, Chromium, ffmpeg)
+      - name: تثبيت الأدوات المطلوبة
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb ffmpeg chromium-browser
 
-      - name: تشغيل شاشة افتراضية (Xvfb)
+      - name: تشغيل شاشة افتراضية
         run: |
-          Xvfb :99 -screen 0 ${{ env.SCREEN_WIDTH }}x${{ env.SCREEN_HEIGHT }}x24 &
+          Xvfb :99 -screen 0 ${{ inputs.screen_width }}x${{ inputs.screen_height }}x24 &
           sleep 3
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح الصفحة داخل المتصفح (وضع كيوسك - ملء الشاشة)
+      - name: فتح الصفحة في المتصفح
         run: |
           chromium-browser \
             --kiosk \
@@ -47,30 +45,25 @@ jobs:
             --disable-infobars \
             --disable-notifications \
             --autoplay-policy=no-user-gesture-required \
-            --window-size=${{ env.SCREEN_WIDTH }},${{ env.SCREEN_HEIGHT }} \
-            "${{ env.TARGET_URL }}" &
-          # وقت انتظار بسيط عشان الصفحة تحمّل قبل بداية التسجيل
-          sleep 10
+            --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
+            "${{ inputs.target_url }}" &
+          sleep 10   # انتظار تحميل الصفحة
 
-      # ملاحظة مهمة: لو الصفحة تحتاج ضغط زر "تشغيل" أو تسجيل دخول،
-      # لازم تضيف هنا خطوة تحاكي الضغط تلقائيًا (عادة عبر أداة مثل
-      # xdotool أو سكربت Puppeteer). قل لي تفاصيل الصفحة وأضيفها لك.
-
-      - name: بدء التسجيل لمدة ساعة كاملة
+      - name: بدء التسجيل للمدة المحددة
         run: |
+          DURATION_SEC=$(( ${{ inputs.duration_minutes }} * 60 ))
           ffmpeg -y \
             -f x11grab \
-            -video_size ${{ env.SCREEN_WIDTH }}x${{ env.SCREEN_HEIGHT }} \
+            -video_size ${{ inputs.screen_width }}x${{ inputs.screen_height }} \
             -framerate 15 \
             -i :99.0 \
-            -t ${{ env.DURATION_SECONDS }} \
+            -t $DURATION_SEC \
             -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
             recording.mp4
 
-      - name: رفع الفيديو كملف قابل للتحميل (Artifact)
+      - name: رفع الفيديو كملف قابل للتحميل
         uses: actions/upload-artifact@v4
         with:
           name: page-recording
           path: recording.mp4
-          # الفيديو يبقى متاح للتحميل لمدة 7 أيام (تقدر تزيدها لين 90 يوم)
           retention-days: 7
