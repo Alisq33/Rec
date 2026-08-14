@@ -26,49 +26,10 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات
+      - name: تثبيت الأدوات (بما فيها xdotool)
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable
-
-      - name: إنشاء ملف تفضيلات Chrome لتجاوز شاشة الترحيب
-        run: |
-          mkdir -p /tmp/chrome-profile
-          cat > /tmp/chrome-profile/master_preferences << EOF
-          {
-            "homepage": "http://www.google.com",
-            "homepage_is_newtabpage": true,
-            "browser": {
-              "check_default_browser": false,
-              "has_seen_welcome_page": true,
-              "suppress_first_run_default_browser_prompt": true
-            },
-            "distribution": {
-              "skip_first_run_ui": true,
-              "make_chrome_default_for_user": false,
-              "system_level": true,
-              "verbose_logging": false
-            },
-            "google": {
-              "services": {
-                "username": "",
-                "signin_scoped_device_id": ""
-              }
-            },
-            "sync_promo": {
-              "show_on_first_run_allowed": false
-            },
-            "first_run": {
-              "show_welcome_page": false
-            },
-            "initial_preferences": {
-              "browser": {
-                "check_default_browser": false
-              }
-            }
-          }
-          EOF
-          echo "✅ تم إنشاء ملف master_preferences"
+          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool
 
       - name: تشغيل PulseAudio وإنشاء مأخذ صوت افتراضي
         run: |
@@ -82,8 +43,9 @@ jobs:
           sleep 5
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح المتصفح مع تجاوز شاشة الترحيب نهائياً
+      - name: فتح المتصفح وإغلاق نافذة الترحيب تلقائيًا
         run: |
+          # تشغيل Chrome في الخلفية
           google-chrome-stable \
             --kiosk \
             --no-sandbox \
@@ -94,11 +56,37 @@ jobs:
             --autoplay-policy=no-user-gesture-required \
             --no-default-browser-check \
             --disable-first-run-ui \
-            --disable-browser-side-navigation \
             --user-data-dir=/tmp/chrome-profile \
-            --initial-preferences-file=/tmp/chrome-profile/master_preferences \
             --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
             "${{ inputs.target_url }}" &
+          
+          # انتظار حتى تظهر نافذة الترحيب
+          echo "⏳ انتظار ظهور نافذة Chrome..."
+          sleep 5
+          
+          # البحث عن نافذة الترحيب والضغط على OK
+          # (نحاول عدة مرات لأن النافذة قد تتأخر)
+          for i in {1..10}; do
+            # البحث عن نافذة عنوانها "Make Google Chrome"
+            WIN_ID=$(xdotool search --onlyvisible --name "Make Google Chrome" 2>/dev/null | head -1)
+            if [ -n "$WIN_ID" ]; then
+              echo "✅ تم العثور على نافذة الترحيب، جارٍ الضغط على OK..."
+              # التركيز على النافذة
+              xdotool windowactivate $WIN_ID
+              sleep 1
+              # الضغط على زر Enter (يضغط على الزر المحدد تلقائيًا)
+              xdotool key Return
+              # الضغط على Tab ثم Enter كحل بديل
+              xdotool key Tab Return
+              echo "✅ تم إغلاق نافذة الترحيب"
+              break
+            fi
+            echo "⏳ لم تظهر النافذة بعد، المحاولة $i من 10..."
+            sleep 2
+          done
+          
+          # انتظار تحميل الصفحة بالكامل
+          echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
           sleep 20
 
       - name: بدء التسجيل (فيديو + صوت)
