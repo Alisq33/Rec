@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات (بما فيها xdotool)
+      - name: تثبيت الأدوات
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool
@@ -43,7 +43,7 @@ jobs:
           sleep 5
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح المتصفح وإغلاق نافذة الترحيب تلقائيًا
+      - name: فتح المتصفح وإغلاق نافذة الترحيب بضغطة Enter
         run: |
           # تشغيل Chrome في الخلفية
           google-chrome-stable \
@@ -60,32 +60,18 @@ jobs:
             --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
             "${{ inputs.target_url }}" &
           
-          # انتظار حتى تظهر نافذة الترحيب
-          echo "⏳ انتظار ظهور نافذة Chrome..."
-          sleep 5
+          # انتظار حتى تظهر النافذة (أو أي نافذة Chrome نشطة)
+          sleep 3
           
-          # البحث عن نافذة الترحيب والضغط على OK
-          # (نحاول عدة مرات لأن النافذة قد تتأخر)
-          for i in {1..10}; do
-            # البحث عن نافذة عنوانها "Make Google Chrome"
-            WIN_ID=$(xdotool search --onlyvisible --name "Make Google Chrome" 2>/dev/null | head -1)
-            if [ -n "$WIN_ID" ]; then
-              echo "✅ تم العثور على نافذة الترحيب، جارٍ الضغط على OK..."
-              # التركيز على النافذة
-              xdotool windowactivate $WIN_ID
-              sleep 1
-              # الضغط على زر Enter (يضغط على الزر المحدد تلقائيًا)
-              xdotool key Return
-              # الضغط على Tab ثم Enter كحل بديل
-              xdotool key Tab Return
-              echo "✅ تم إغلاق نافذة الترحيب"
-              break
-            fi
-            echo "⏳ لم تظهر النافذة بعد، المحاولة $i من 10..."
-            sleep 2
-          done
+          # إرسال ضغطة Enter إلى النافذة النشطة (التي هي Chrome)
+          # هذا سيضغط على زر OK في نافذة الترحيب
+          echo "🔄 إرسال ضغطة Enter لإغلاق نافذة الترحيب..."
+          xdotool key Return
+          sleep 1
+          # تأكيد إضافي بإرسال Enter مرة أخرى
+          xdotool key Return
           
-          # انتظار تحميل الصفحة بالكامل
+          # انتظار تحميل الصفحة
           echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
           sleep 20
 
