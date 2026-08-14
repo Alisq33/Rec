@@ -31,6 +31,45 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable
 
+      - name: إنشاء ملف تفضيلات Chrome لتجاوز شاشة الترحيب
+        run: |
+          mkdir -p /tmp/chrome-profile
+          cat > /tmp/chrome-profile/master_preferences << EOF
+          {
+            "homepage": "http://www.google.com",
+            "homepage_is_newtabpage": true,
+            "browser": {
+              "check_default_browser": false,
+              "has_seen_welcome_page": true,
+              "suppress_first_run_default_browser_prompt": true
+            },
+            "distribution": {
+              "skip_first_run_ui": true,
+              "make_chrome_default_for_user": false,
+              "system_level": true,
+              "verbose_logging": false
+            },
+            "google": {
+              "services": {
+                "username": "",
+                "signin_scoped_device_id": ""
+              }
+            },
+            "sync_promo": {
+              "show_on_first_run_allowed": false
+            },
+            "first_run": {
+              "show_welcome_page": false
+            },
+            "initial_preferences": {
+              "browser": {
+                "check_default_browser": false
+              }
+            }
+          }
+          EOF
+          echo "✅ تم إنشاء ملف master_preferences"
+
       - name: تشغيل PulseAudio وإنشاء مأخذ صوت افتراضي
         run: |
           pulseaudio --start --exit-idle-time=-1
@@ -43,7 +82,7 @@ jobs:
           sleep 5
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح المتصفح مع تجاوز شاشة الترحيب
+      - name: فتح المتصفح مع تجاوز شاشة الترحيب نهائياً
         run: |
           google-chrome-stable \
             --kiosk \
@@ -57,6 +96,7 @@ jobs:
             --disable-first-run-ui \
             --disable-browser-side-navigation \
             --user-data-dir=/tmp/chrome-profile \
+            --initial-preferences-file=/tmp/chrome-profile/master_preferences \
             --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
             "${{ inputs.target_url }}" &
           sleep 20
