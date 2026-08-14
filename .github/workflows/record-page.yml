@@ -1,4 +1,4 @@
-name: Record Web Page with Audio (Firefox)
+name: Record Web Page with Audio (Custom Mute Button)
 
 on:
   workflow_dispatch:
@@ -12,13 +12,21 @@ on:
         required: true
         default: '2'
       screen_width:
-        description: 'عرض الشاشة'
+        description: 'عرض الشاشة (بكسل)'
         required: false
         default: '1920'
       screen_height:
-        description: 'ارتفاع الشاشة'
+        description: 'ارتفاع الشاشة (بكسل)'
         required: false
         default: '1080'
+      mute_x:
+        description: 'الإحداثي الأفقي للنقر (من اليسار) - اتركه فارغاً لاستخدام القيمة التلقائية (العرض - 100)'
+        required: false
+        default: ''
+      mute_y:
+        description: 'الإحداثي العمودي للنقر (من الأعلى) - اتركه فارغاً لاستخدام القيمة التلقائية (الارتفاع - 50)'
+        required: false
+        default: ''
 
 jobs:
   record:
@@ -26,29 +34,54 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات (Firefox بدلاً من Chrome)
+      - name: تثبيت الأدوات
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg pulseaudio firefox
+          sudo apt-get install -y xvfb ffmpeg pulseaudio firefox xdotool
 
-      - name: تشغيل PulseAudio وإنشاء مأخذ صوت افتراضي
+      - name: تشغيل PulseAudio
         run: |
           pulseaudio --start --exit-idle-time=-1
           pactl load-module module-null-sink sink_name=virtual_sink
           pactl set-default-sink virtual_sink
 
-      - name: تشغيل شاشة افتراضية (Xvfb)
+      - name: تشغيل شاشة افتراضية
         run: |
           Xvfb :99 -screen 0 ${{ inputs.screen_width }}x${{ inputs.screen_height }}x24 &
           sleep 5
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح Firefox في وضع kiosk (بدون أي نوافذ ترحيب)
+      - name: فتح Firefox في وضع kiosk
         run: |
           firefox --kiosk -url "${{ inputs.target_url }}" &
-          # ننتظر 15 ثانية لتحميل الصفحة بالكامل
-          echo "⏳ انتظار تحميل الصفحة 15 ثانية..."
-          sleep 15
+          echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
+          sleep 20
+
+      - name: النقر على زر الميوت (بإحداثيات مخصصة)
+        run: |
+          # حساب الإحداثيات: إذا أدخل المستخدم قيمة، استخدمها، وإلا استخدم القيم التلقائية
+          if [ -n "${{ inputs.mute_x }}" ]; then
+            X_CLICK=${{ inputs.mute_x }}
+          else
+            X_CLICK=$(( ${{ inputs.screen_width }} - 100 ))
+          fi
+
+          if [ -n "${{ inputs.mute_y }}" ]; then
+            Y_CLICK=${{ inputs.mute_y }}
+          else
+            Y_CLICK=$(( ${{ inputs.screen_height }} - 50 ))
+          fi
+
+          echo "🖱️ سيتم النقر على الإحداثيات ($X_CLICK, $Y_CLICK)"
+          
+          # تحريك المؤشر والنقر مرتين
+          xdotool mousemove $X_CLICK $Y_CLICK click 1
+          sleep 1
+          xdotool click 1
+          
+          # إرسال مفتاح M كاحتياطي
+          echo "⌨️ إرسال مفتاح M"
+          xdotool key M
 
       - name: بدء التسجيل (فيديو + صوت)
         run: |
@@ -65,7 +98,7 @@ jobs:
             -c:a aac -b:a 128k \
             recording.mp4
 
-      - name: رفع الفيديو الناتج
+      - name: رفع الفيديو
         uses: actions/upload-artifact@v4
         with:
           name: page-recording-with-audio
