@@ -8,15 +8,15 @@ on:
         required: true
         default: 'https://wolf.live/g/9969'
       duration_minutes:
-        description: 'مدة التسجيل بالدقائق (مثال: 2 = دقيقتين، 60 = ساعة)'
+        description: 'مدة التسجيل بالدقائق'
         required: true
-        default: '2'   # ابدأ بمدة قصيرة للاختبار
+        default: '2'
       screen_width:
-        description: 'عرض الشاشة (بكسل)'
+        description: 'عرض الشاشة'
         required: false
         default: '1920'
       screen_height:
-        description: 'ارتفاع الشاشة (بكسل)'
+        description: 'ارتفاع الشاشة'
         required: false
         default: '1080'
 
@@ -26,28 +26,24 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات (Xvfb, ffmpeg, Chrome, PulseAudio)
+      - name: تثبيت الأدوات
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable
 
       - name: تشغيل PulseAudio وإنشاء مأخذ صوت افتراضي
         run: |
-          # بدء PulseAudio في الخلفية
           pulseaudio --start --exit-idle-time=-1
-          # إنشاء مأخذ صوت فارغ (null sink) لالتقاط الصوت
           pactl load-module module-null-sink sink_name=virtual_sink
-          # تعيينه كجهاز إخراج افتراضي (كل التطبيقات سترسل الصوت إليه)
           pactl set-default-sink virtual_sink
-          echo "✅ تم إعداد الصوت الافتراضي"
 
-      - name: تشغيل شاشة افتراضية (Xvfb)
+      - name: تشغيل شاشة افتراضية
         run: |
           Xvfb :99 -screen 0 ${{ inputs.screen_width }}x${{ inputs.screen_height }}x24 &
           sleep 5
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح المتصفح مع السماح بالصوت التلقائي
+      - name: فتح المتصفح مع تجاوز شاشة الترحيب
         run: |
           google-chrome-stable \
             --kiosk \
@@ -57,15 +53,17 @@ jobs:
             --disable-software-rasterizer \
             --disable-features=TranslateUI \
             --autoplay-policy=no-user-gesture-required \
+            --no-default-browser-check \
+            --disable-first-run-ui \
+            --disable-browser-side-navigation \
+            --user-data-dir=/tmp/chrome-profile \
             --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
             "${{ inputs.target_url }}" &
-          echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
           sleep 20
 
       - name: بدء التسجيل (فيديو + صوت)
         run: |
           DURATION_SEC=$(( ${{ inputs.duration_minutes }} * 60 ))
-          echo "🎥 بدء التسجيل لمدة $DURATION_SEC ثانية مع الصوت..."
           ffmpeg -y \
             -f x11grab \
             -video_size ${{ inputs.screen_width }}x${{ inputs.screen_height }} \
@@ -78,7 +76,7 @@ jobs:
             -c:a aac -b:a 128k \
             recording.mp4
 
-      - name: رفع الفيديو الناتج (Artifact)
+      - name: رفع الفيديو الناتج
         uses: actions/upload-artifact@v4
         with:
           name: page-recording-with-audio
