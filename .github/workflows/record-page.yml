@@ -1,4 +1,4 @@
-name: Record Web Page
+name: Record Web Page with Audio
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
       duration_minutes:
         description: 'مدة التسجيل بالدقائق (مثال: 2 = دقيقتين، 60 = ساعة)'
         required: true
-        default: '60'
+        default: '2'   # ابدأ بمدة قصيرة للاختبار
       screen_width:
         description: 'عرض الشاشة (بكسل)'
         required: false
@@ -23,47 +23,64 @@ on:
 jobs:
   record:
     runs-on: ubuntu-latest
-    timeout-minutes: 120   # مهلة كافية لأي مدة حتى 60 دقيقة
+    timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات المطلوبة
+      - name: تثبيت الأدوات (Xvfb, ffmpeg, Chrome, PulseAudio)
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg chromium-browser
+          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable
 
-      - name: تشغيل شاشة افتراضية
+      - name: تشغيل PulseAudio وإنشاء مأخذ صوت افتراضي
+        run: |
+          # بدء PulseAudio في الخلفية
+          pulseaudio --start --exit-idle-time=-1
+          # إنشاء مأخذ صوت فارغ (null sink) لالتقاط الصوت
+          pactl load-module module-null-sink sink_name=virtual_sink
+          # تعيينه كجهاز إخراج افتراضي (كل التطبيقات سترسل الصوت إليه)
+          pactl set-default-sink virtual_sink
+          echo "✅ تم إعداد الصوت الافتراضي"
+
+      - name: تشغيل شاشة افتراضية (Xvfb)
         run: |
           Xvfb :99 -screen 0 ${{ inputs.screen_width }}x${{ inputs.screen_height }}x24 &
-          sleep 3
+          sleep 5
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح الصفحة في المتصفح
+      - name: فتح المتصفح مع السماح بالصوت التلقائي
         run: |
-          chromium-browser \
+          google-chrome-stable \
             --kiosk \
             --no-sandbox \
-            --disable-infobars \
-            --disable-notifications \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --disable-software-rasterizer \
+            --disable-features=TranslateUI \
             --autoplay-policy=no-user-gesture-required \
             --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
             "${{ inputs.target_url }}" &
-          sleep 10
+          echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
+          sleep 20
 
-      - name: بدء التسجيل للمدة المحددة
+      - name: بدء التسجيل (فيديو + صوت)
         run: |
           DURATION_SEC=$(( ${{ inputs.duration_minutes }} * 60 ))
+          echo "🎥 بدء التسجيل لمدة $DURATION_SEC ثانية مع الصوت..."
           ffmpeg -y \
             -f x11grab \
             -video_size ${{ inputs.screen_width }}x${{ inputs.screen_height }} \
             -framerate 15 \
             -i :99.0 \
+            -f pulse \
+            -i default \
             -t $DURATION_SEC \
             -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+            -c:a aac -b:a 128k \
             recording.mp4
 
-      - name: رفع الفيديو كملف قابل للتحميل
+      - name: رفع الفيديو الناتج (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: page-recording
+          name: page-recording-with-audio
           path: recording.mp4
           retention-days: 7
