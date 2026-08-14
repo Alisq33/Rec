@@ -1,4 +1,4 @@
-name: Record Web Page with Audio
+name: Record Web Page with Audio (Firefox)
 
 on:
   workflow_dispatch:
@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات
+      - name: تثبيت الأدوات (Firefox بدلاً من Chrome)
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool
+          sudo apt-get install -y xvfb ffmpeg pulseaudio firefox
 
       - name: تشغيل PulseAudio وإنشاء مأخذ صوت افتراضي
         run: |
@@ -37,43 +37,18 @@ jobs:
           pactl load-module module-null-sink sink_name=virtual_sink
           pactl set-default-sink virtual_sink
 
-      - name: تشغيل شاشة افتراضية
+      - name: تشغيل شاشة افتراضية (Xvfb)
         run: |
           Xvfb :99 -screen 0 ${{ inputs.screen_width }}x${{ inputs.screen_height }}x24 &
           sleep 5
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح المتصفح وإغلاق نافذة الترحيب بضغطة Enter
+      - name: فتح Firefox في وضع kiosk (بدون أي نوافذ ترحيب)
         run: |
-          # تشغيل Chrome في الخلفية
-          google-chrome-stable \
-            --kiosk \
-            --no-sandbox \
-            --disable-dev-shm-usage \
-            --disable-gpu \
-            --disable-software-rasterizer \
-            --disable-features=TranslateUI \
-            --autoplay-policy=no-user-gesture-required \
-            --no-default-browser-check \
-            --disable-first-run-ui \
-            --user-data-dir=/tmp/chrome-profile \
-            --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
-            "${{ inputs.target_url }}" &
-          
-          # انتظار حتى تظهر النافذة (أو أي نافذة Chrome نشطة)
-          sleep 3
-          
-          # إرسال ضغطة Enter إلى النافذة النشطة (التي هي Chrome)
-          # هذا سيضغط على زر OK في نافذة الترحيب
-          echo "🔄 إرسال ضغطة Enter لإغلاق نافذة الترحيب..."
-          xdotool key Return
-          sleep 1
-          # تأكيد إضافي بإرسال Enter مرة أخرى
-          xdotool key Return
-          
-          # انتظار تحميل الصفحة
-          echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
-          sleep 20
+          firefox --kiosk -url "${{ inputs.target_url }}" &
+          # ننتظر 15 ثانية لتحميل الصفحة بالكامل
+          echo "⏳ انتظار تحميل الصفحة 15 ثانية..."
+          sleep 15
 
       - name: بدء التسجيل (فيديو + صوت)
         run: |
