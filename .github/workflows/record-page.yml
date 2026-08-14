@@ -23,7 +23,7 @@ on:
 jobs:
   record:
     runs-on: ubuntu-latest
-    timeout-minutes:  ${{ fromJSON(inputs.duration_minutes) + 10 }}  # مهلة إضافية للتحضير والرفع
+    timeout-minutes: 120   # مهلة كافية لأي مدة حتى 60 دقيقة
 
     steps:
       - name: تثبيت الأدوات المطلوبة
@@ -47,7 +47,7 @@ jobs:
             --autoplay-policy=no-user-gesture-required \
             --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
             "${{ inputs.target_url }}" &
-          sleep 10   # انتظار تحميل الصفحة
+          sleep 10
 
       - name: بدء التسجيل للمدة المحددة
         run: |
