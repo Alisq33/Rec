@@ -1,4 +1,4 @@
-name: Record Web Page with Audio (Fixed Unmute Position)
+name: Record Web Page with Audio (Full Screen)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       target_url:
         description: 'رابط الصفحة المراد تسجيلها'
         required: true
-        default: 'https://wolf.live/g/9969'
+        default: 'https://wolf.live/g/74000'
       duration_minutes:
         description: 'مدة التسجيل بالدقائق'
         required: true
@@ -19,14 +19,6 @@ on:
         description: 'ارتفاع الشاشة (بكسل)'
         required: false
         default: '1080'
-      mute_x_percent:
-        description: 'النسبة المئوية لعرض الشاشة للنقر (0-100) - اتركها فارغة لاستخدام 48.5%'
-        required: false
-        default: '48.5'
-      mute_y_percent:
-        description: 'النسبة المئوية لارتفاع الشاشة للنقر (0-100) - اتركها فارغة لاستخدام 18.5%'
-        required: false
-        default: '18.5'
 
 jobs:
   record:
@@ -34,51 +26,47 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات
+      - name: تثبيت الأدوات المطلوبة
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg pulseaudio firefox xdotool
+          sudo apt-get install -y xvfb ffmpeg pulseaudio firefox xdotool x11-xserver-utils
 
-      - name: تشغيل PulseAudio وإنشاء مأخذ صوت افتراضي
+      - name: تشغيل PulseAudio
         run: |
           pulseaudio --start --exit-idle-time=-1
           pactl load-module module-null-sink sink_name=virtual_sink
           pactl set-default-sink virtual_sink
 
-      - name: تشغيل شاشة افتراضية
+      - name: تشغيل شاشة افتراضية بالدقة المطلوبة
         run: |
           Xvfb :99 -screen 0 ${{ inputs.screen_width }}x${{ inputs.screen_height }}x24 &
           sleep 5
+          export DISPLAY=:99
+          # ضبط الدقة باستخدام xrandr للتأكيد
+          xrandr -s ${{ inputs.screen_width }}x${{ inputs.screen_height }}
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح Firefox في وضع kiosk
+      - name: فتح Firefox في وضع ملء الشاشة (kiosk)
         run: |
           firefox --kiosk -url "${{ inputs.target_url }}" &
           echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
           sleep 20
 
-      - name: النقر على زر UNMUTE (باستخدام النسب المئوية)
+      - name: النقر على زر Unmute (الموقع المحدد)
         run: |
-          # حساب الإحداثيات بناءً على النسب المئوية المدخلة
-          X_PERCENT=${{ inputs.mute_x_percent }}
-          Y_PERCENT=${{ inputs.mute_y_percent }}
-          
-          X_CLICK=$(echo "scale=0; (${{ inputs.screen_width }} * $X_PERCENT) / 100" | bc)
-          Y_CLICK=$(echo "scale=0; (${{ inputs.screen_height }} * $Y_PERCENT) / 100" | bc)
-          
-          echo "🖱️ سيتم النقر على الإحداثيات ($X_CLICK, $Y_CLICK)"
-          
-          # تحريك المؤشر والنقر مرتين للتأكيد
+          # حساب الإحداثيات: 49% عرضاً، 18% ارتفاعاً (منتصف المنطقة البرتقالية)
+          X_CLICK=$(( ${{ inputs.screen_width }} * 49 / 100 ))
+          Y_CLICK=$(( ${{ inputs.screen_height }} * 18 / 100 ))
+          echo "🖱️ النقر على ($X_CLICK, $Y_CLICK)"
+          sleep 2
+          # النقر مرتين
           xdotool mousemove $X_CLICK $Y_CLICK click 1
           sleep 1
           xdotool click 1
-          
-          # إرسال مفتاح M كإجراء احتياطي (بعض المشغلات تستجيب له)
-          echo "⌨️ إرسال مفتاح M كبديل"
+          # إرسال مفتاح M كاحتياطي
           xdotool key M
-          sleep 2
 
-      - name: بدء التسجيل (فيديو + صوت)
+      - name: بدء تسجيل الفيديو والصوت
         run: |
           DURATION_SEC=$(( ${{ inputs.duration_minutes }} * 60 ))
           ffmpeg -y \
@@ -93,9 +81,9 @@ jobs:
             -c:a aac -b:a 128k \
             recording.mp4
 
-      - name: رفع الفيديو الناتج
+      - name: رفع الفيديو الناتج (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: page-recording-with-audio
+          name: page-recording-fullscreen
           path: recording.mp4
           retention-days: 7
