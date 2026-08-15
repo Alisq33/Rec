@@ -1,4 +1,4 @@
-name: Record Web Page with Audio (Custom Mute Button)
+name: Record Web Page with Audio (Fixed Unmute Position)
 
 on:
   workflow_dispatch:
@@ -19,14 +19,14 @@ on:
         description: 'ارتفاع الشاشة (بكسل)'
         required: false
         default: '1080'
-      mute_x:
-        description: 'الإحداثي الأفقي للنقر (من اليسار) - اتركه فارغاً لاستخدام القيمة التلقائية (العرض - 100)'
+      mute_x_percent:
+        description: 'النسبة المئوية لعرض الشاشة للنقر (0-100) - اتركها فارغة لاستخدام 48.5%'
         required: false
-        default: ''
-      mute_y:
-        description: 'الإحداثي العمودي للنقر (من الأعلى) - اتركه فارغاً لاستخدام القيمة التلقائية (الارتفاع - 50)'
+        default: '48.5'
+      mute_y_percent:
+        description: 'النسبة المئوية لارتفاع الشاشة للنقر (0-100) - اتركها فارغة لاستخدام 18.5%'
         required: false
-        default: ''
+        default: '18.5'
 
 jobs:
   record:
@@ -39,7 +39,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb ffmpeg pulseaudio firefox xdotool
 
-      - name: تشغيل PulseAudio
+      - name: تشغيل PulseAudio وإنشاء مأخذ صوت افتراضي
         run: |
           pulseaudio --start --exit-idle-time=-1
           pactl load-module module-null-sink sink_name=virtual_sink
@@ -57,31 +57,26 @@ jobs:
           echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
           sleep 20
 
-      - name: النقر على زر الميوت (بإحداثيات مخصصة)
+      - name: النقر على زر UNMUTE (باستخدام النسب المئوية)
         run: |
-          # حساب الإحداثيات: إذا أدخل المستخدم قيمة، استخدمها، وإلا استخدم القيم التلقائية
-          if [ -n "${{ inputs.mute_x }}" ]; then
-            X_CLICK=${{ inputs.mute_x }}
-          else
-            X_CLICK=$(( ${{ inputs.screen_width }} - 100 ))
-          fi
-
-          if [ -n "${{ inputs.mute_y }}" ]; then
-            Y_CLICK=${{ inputs.mute_y }}
-          else
-            Y_CLICK=$(( ${{ inputs.screen_height }} - 50 ))
-          fi
-
+          # حساب الإحداثيات بناءً على النسب المئوية المدخلة
+          X_PERCENT=${{ inputs.mute_x_percent }}
+          Y_PERCENT=${{ inputs.mute_y_percent }}
+          
+          X_CLICK=$(echo "scale=0; (${{ inputs.screen_width }} * $X_PERCENT) / 100" | bc)
+          Y_CLICK=$(echo "scale=0; (${{ inputs.screen_height }} * $Y_PERCENT) / 100" | bc)
+          
           echo "🖱️ سيتم النقر على الإحداثيات ($X_CLICK, $Y_CLICK)"
           
-          # تحريك المؤشر والنقر مرتين
+          # تحريك المؤشر والنقر مرتين للتأكيد
           xdotool mousemove $X_CLICK $Y_CLICK click 1
           sleep 1
           xdotool click 1
           
-          # إرسال مفتاح M كاحتياطي
-          echo "⌨️ إرسال مفتاح M"
+          # إرسال مفتاح M كإجراء احتياطي (بعض المشغلات تستجيب له)
+          echo "⌨️ إرسال مفتاح M كبديل"
           xdotool key M
+          sleep 2
 
       - name: بدء التسجيل (فيديو + صوت)
         run: |
@@ -98,7 +93,7 @@ jobs:
             -c:a aac -b:a 128k \
             recording.mp4
 
-      - name: رفع الفيديو
+      - name: رفع الفيديو الناتج
         uses: actions/upload-artifact@v4
         with:
           name: page-recording-with-audio
