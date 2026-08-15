@@ -1,4 +1,4 @@
-name: Record Web Page with Audio (Chrome)
+name: Record Web Page with Audio (Chrome - Fixed)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       target_url:
         description: 'رابط الصفحة المراد تسجيلها'
         required: true
-        default: 'https://wolf.live/g/9969'
+        default: 'https://wolf.live/g/74000'
       duration_minutes:
         description: 'مدة التسجيل بالدقائق'
         required: true
@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات
+      - name: تثبيت الأدوات المطلوبة
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool x11-xserver-utils
+          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool wmctrl x11-xserver-utils
 
       - name: تشغيل PulseAudio
         run: |
@@ -45,7 +45,7 @@ jobs:
           xrandr -s ${{ inputs.screen_width }}x${{ inputs.screen_height }}
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: إنشاء ملف تفضيلات Chrome لتجاوز شاشة الترحيب
+      - name: إنشاء ملف تفضيلات Chrome
         run: |
           mkdir -p /tmp/chrome-profile
           cat > /tmp/chrome-profile/master_preferences << 'EOF'
@@ -61,7 +61,7 @@ jobs:
           }
           EOF
 
-      - name: فتح Chrome مع ضبط الحجم وتجاوز الترحيب
+      - name: فتح Chrome مع ضبط الحجم
         run: |
           google-chrome-stable \
             --kiosk \
@@ -81,16 +81,16 @@ jobs:
 
       - name: التركيز على نافذة Chrome والنقر على Unmute
         run: |
-          # الحصول على معرف نافذة Chrome
-          WID=$(xdotool search --class "google-chrome" | head -1)
-          if [ -z "$WID" ]; then
-            echo "⚠️ لم يتم العثور على نافذة Chrome، سنحاول باستخدام النافذة النشطة"
-            WID=$(xdotool getwindowfocus)
+          # البحث عن نافذة Chrome باستخدام wmctrl (أكثر موثوقية)
+          WINDOW_ID=$(wmctrl -l | grep -i "google-chrome" | head -1 | cut -d' ' -f1)
+          if [ -z "$WINDOW_ID" ]; then
+            echo "⚠️ لم يتم العثور على نافذة Chrome، استخدام النافذة النشطة"
+            WINDOW_ID=$(xdotool getwindowfocus)
           fi
-          echo "✅ تم العثور على النافذة: $WID"
+          echo "✅ معرف النافذة: $WINDOW_ID"
           
-          # تفعيل النافذة
-          xdotool windowactivate $WID
+          # تفعيل النافذة باستخدام wmctrl
+          wmctrl -i -a $WINDOW_ID
           sleep 2
           
           # حساب الإحداثيات: 49% عرضاً، 18% ارتفاعاً
@@ -98,13 +98,15 @@ jobs:
           Y_CLICK=$(( ${{ inputs.screen_height }} * 18 / 100 ))
           echo "🖱️ النقر على الإحداثيات ($X_CLICK, $Y_CLICK)"
           
-          # النقر مرتين
-          xdotool mousemove --window $WID $X_CLICK $Y_CLICK click 1
+          # النقر مرتين مع --sync لضمان التنفيذ
+          xdotool mousemove --sync --window $WINDOW_ID $X_CLICK $Y_CLICK
+          xdotool click --sync 1
           sleep 1
-          xdotool click 1
+          xdotool click --sync 1
           
           # إرسال مفتاح M كاحتياطي
-          xdotool key M
+          xdotool key --sync M
+          echo "✅ تم النقر على زر Unmute"
 
       - name: بدء تسجيل الفيديو والصوت
         run: |
