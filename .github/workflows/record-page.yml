@@ -1,4 +1,4 @@
-name: Record Web Page with Audio (Full Screen)
+name: Record Web Page with Audio (Chrome)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       target_url:
         description: 'رابط الصفحة المراد تسجيلها'
         required: true
-        default: 'https://wolf.live/g/74000'
+        default: 'https://wolf.live/g/9969'
       duration_minutes:
         description: 'مدة التسجيل بالدقائق'
         required: true
@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات المطلوبة
+      - name: تثبيت الأدوات
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg pulseaudio firefox xdotool x11-xserver-utils
+          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool x11-xserver-utils
 
       - name: تشغيل PulseAudio
         run: |
@@ -42,27 +42,67 @@ jobs:
           Xvfb :99 -screen 0 ${{ inputs.screen_width }}x${{ inputs.screen_height }}x24 &
           sleep 5
           export DISPLAY=:99
-          # ضبط الدقة باستخدام xrandr للتأكيد
           xrandr -s ${{ inputs.screen_width }}x${{ inputs.screen_height }}
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: فتح Firefox في وضع ملء الشاشة (kiosk)
+      - name: إنشاء ملف تفضيلات Chrome لتجاوز شاشة الترحيب
         run: |
-          firefox --kiosk -url "${{ inputs.target_url }}" &
-          echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
-          sleep 20
+          mkdir -p /tmp/chrome-profile
+          cat > /tmp/chrome-profile/master_preferences << 'EOF'
+          {
+            "browser": {
+              "check_default_browser": false,
+              "has_seen_welcome_page": true
+            },
+            "distribution": {
+              "skip_first_run_ui": true,
+              "make_chrome_default_for_user": false
+            }
+          }
+          EOF
 
-      - name: النقر على زر Unmute (الموقع المحدد)
+      - name: فتح Chrome مع ضبط الحجم وتجاوز الترحيب
         run: |
-          # حساب الإحداثيات: 49% عرضاً، 18% ارتفاعاً (منتصف المنطقة البرتقالية)
+          google-chrome-stable \
+            --kiosk \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --disable-software-rasterizer \
+            --autoplay-policy=no-user-gesture-required \
+            --no-default-browser-check \
+            --disable-first-run-ui \
+            --user-data-dir=/tmp/chrome-profile \
+            --initial-preferences-file=/tmp/chrome-profile/master_preferences \
+            --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
+            "${{ inputs.target_url }}" &
+          echo "⏳ انتظار تحميل الصفحة 25 ثانية..."
+          sleep 25
+
+      - name: التركيز على نافذة Chrome والنقر على Unmute
+        run: |
+          # الحصول على معرف نافذة Chrome
+          WID=$(xdotool search --class "google-chrome" | head -1)
+          if [ -z "$WID" ]; then
+            echo "⚠️ لم يتم العثور على نافذة Chrome، سنحاول باستخدام النافذة النشطة"
+            WID=$(xdotool getwindowfocus)
+          fi
+          echo "✅ تم العثور على النافذة: $WID"
+          
+          # تفعيل النافذة
+          xdotool windowactivate $WID
+          sleep 2
+          
+          # حساب الإحداثيات: 49% عرضاً، 18% ارتفاعاً
           X_CLICK=$(( ${{ inputs.screen_width }} * 49 / 100 ))
           Y_CLICK=$(( ${{ inputs.screen_height }} * 18 / 100 ))
-          echo "🖱️ النقر على ($X_CLICK, $Y_CLICK)"
-          sleep 2
+          echo "🖱️ النقر على الإحداثيات ($X_CLICK, $Y_CLICK)"
+          
           # النقر مرتين
-          xdotool mousemove $X_CLICK $Y_CLICK click 1
+          xdotool mousemove --window $WID $X_CLICK $Y_CLICK click 1
           sleep 1
           xdotool click 1
+          
           # إرسال مفتاح M كاحتياطي
           xdotool key M
 
@@ -81,7 +121,7 @@ jobs:
             -c:a aac -b:a 128k \
             recording.mp4
 
-      - name: رفع الفيديو الناتج (Artifact)
+      - name: رفع الفيديو الناتج
         uses: actions/upload-artifact@v4
         with:
           name: page-recording-fullscreen
