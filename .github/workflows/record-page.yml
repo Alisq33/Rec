@@ -1,4 +1,4 @@
-name: Record Web Page with Audio (Chrome - Final)
+name: Record Web Page with Audio (Firefox - Final)
 
 on:
   workflow_dispatch:
@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: تثبيت الأدوات المطلوبة
+      - name: تثبيت الأدوات
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool x11-xserver-utils
+          sudo apt-get install -y xvfb ffmpeg pulseaudio firefox xdotool
 
       - name: تشغيل PulseAudio
         run: |
@@ -41,55 +41,28 @@ jobs:
         run: |
           Xvfb :99 -screen 0 ${{ inputs.screen_width }}x${{ inputs.screen_height }}x24 &
           sleep 5
-          export DISPLAY=:99
-          xrandr -s ${{ inputs.screen_width }}x${{ inputs.screen_height }}
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: إنشاء ملف تفضيلات Chrome
+      - name: فتح Firefox مع ضبط الحجم (بدون نوافذ ترحيب)
         run: |
-          mkdir -p /tmp/chrome-profile
-          cat > /tmp/chrome-profile/master_preferences << 'EOF'
-          {
-            "browser": {
-              "check_default_browser": false,
-              "has_seen_welcome_page": true
-            },
-            "distribution": {
-              "skip_first_run_ui": true,
-              "make_chrome_default_for_user": false
-            }
-          }
-          EOF
+          firefox --kiosk \
+            --width ${{ inputs.screen_width }} \
+            --height ${{ inputs.screen_height }} \
+            -url "${{ inputs.target_url }}" &
+          echo "⏳ انتظار تحميل الصفحة 20 ثانية..."
+          sleep 20
 
-      - name: فتح Chrome مع ضبط الحجم
+      - name: النقر على زر Unmute (الموقع المحدد)
         run: |
-          google-chrome-stable \
-            --kiosk \
-            --no-sandbox \
-            --disable-dev-shm-usage \
-            --disable-gpu \
-            --disable-software-rasterizer \
-            --autoplay-policy=no-user-gesture-required \
-            --no-default-browser-check \
-            --disable-first-run-ui \
-            --user-data-dir=/tmp/chrome-profile \
-            --initial-preferences-file=/tmp/chrome-profile/master_preferences \
-            --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
-            "${{ inputs.target_url }}" &
-          echo "⏳ انتظار تحميل الصفحة 30 ثانية..."
-          sleep 30
-
-      - name: التركيز على نافذة Chrome والنقر على Unmute
-        run: |
-          # البحث عن نافذة Chrome
-          WINDOW_ID=$(xdotool search --class "google-chrome" | head -1)
+          # البحث عن نافذة Firefox
+          WINDOW_ID=$(xdotool search --class "firefox" | head -1)
           if [ -z "$WINDOW_ID" ]; then
-            echo "⚠️ لم يتم العثور على نافذة Chrome، استخدام النافذة النشطة"
+            echo "⚠️ لم يتم العثور على Firefox، استخدام النافذة النشطة"
             WINDOW_ID=$(xdotool getwindowfocus)
           fi
           echo "✅ معرف النافذة: $WINDOW_ID"
           
-          # محاولة التركيز (تجاهل الأخطاء)
+          # تفعيل النافذة
           xdotool windowfocus $WINDOW_ID 2>/dev/null || true
           sleep 2
           
