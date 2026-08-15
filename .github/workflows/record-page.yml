@@ -1,4 +1,4 @@
-name: Record Web Page with Audio (Chrome - Fixed)
+name: Record Web Page with Audio (Chrome - Final)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       target_url:
         description: 'رابط الصفحة المراد تسجيلها'
         required: true
-        default: 'https://wolf.live/g/74000'
+        default: 'https://wolf.live/g/9969'
       duration_minutes:
         description: 'مدة التسجيل بالدقائق'
         required: true
@@ -29,7 +29,7 @@ jobs:
       - name: تثبيت الأدوات المطلوبة
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool wmctrl x11-xserver-utils
+          sudo apt-get install -y xvfb ffmpeg pulseaudio google-chrome-stable xdotool x11-xserver-utils
 
       - name: تشغيل PulseAudio
         run: |
@@ -76,21 +76,21 @@ jobs:
             --initial-preferences-file=/tmp/chrome-profile/master_preferences \
             --window-size=${{ inputs.screen_width }},${{ inputs.screen_height }} \
             "${{ inputs.target_url }}" &
-          echo "⏳ انتظار تحميل الصفحة 25 ثانية..."
-          sleep 25
+          echo "⏳ انتظار تحميل الصفحة 30 ثانية..."
+          sleep 30
 
       - name: التركيز على نافذة Chrome والنقر على Unmute
         run: |
-          # البحث عن نافذة Chrome باستخدام wmctrl (أكثر موثوقية)
-          WINDOW_ID=$(wmctrl -l | grep -i "google-chrome" | head -1 | cut -d' ' -f1)
+          # البحث عن نافذة Chrome
+          WINDOW_ID=$(xdotool search --class "google-chrome" | head -1)
           if [ -z "$WINDOW_ID" ]; then
             echo "⚠️ لم يتم العثور على نافذة Chrome، استخدام النافذة النشطة"
             WINDOW_ID=$(xdotool getwindowfocus)
           fi
           echo "✅ معرف النافذة: $WINDOW_ID"
           
-          # تفعيل النافذة باستخدام wmctrl
-          wmctrl -i -a $WINDOW_ID
+          # محاولة التركيز (تجاهل الأخطاء)
+          xdotool windowfocus $WINDOW_ID 2>/dev/null || true
           sleep 2
           
           # حساب الإحداثيات: 49% عرضاً، 18% ارتفاعاً
@@ -98,14 +98,15 @@ jobs:
           Y_CLICK=$(( ${{ inputs.screen_height }} * 18 / 100 ))
           echo "🖱️ النقر على الإحداثيات ($X_CLICK, $Y_CLICK)"
           
-          # النقر مرتين مع --sync لضمان التنفيذ
-          xdotool mousemove --sync --window $WINDOW_ID $X_CLICK $Y_CLICK
-          xdotool click --sync 1
+          # النقر مرتين
+          xdotool mousemove --window $WINDOW_ID $X_CLICK $Y_CLICK
           sleep 1
-          xdotool click --sync 1
+          xdotool click 1
+          sleep 1
+          xdotool click 1
           
           # إرسال مفتاح M كاحتياطي
-          xdotool key --sync M
+          xdotool key M
           echo "✅ تم النقر على زر Unmute"
 
       - name: بدء تسجيل الفيديو والصوت
